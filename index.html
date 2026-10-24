@@ -458,6 +458,9 @@ form{display:grid;grid-template-columns:1fr 1fr;gap:14px 16px}
 .f .err{font-size:.78rem;color:#a3261d;min-height:1em}
 .actions{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:8px}
 .done{display:grid;gap:14px}
+.done[hidden]{display:none}
+.actions .send-status{font-size:.85rem;color:var(--muted,#6d685e);margin-left:14px;align-self:center}
+#send-btn[disabled]{opacity:.6;cursor:wait}
 .done .ways{display:flex;flex-wrap:wrap;gap:10px}
 .done .ways .btn{color:var(--text);border-color:var(--text);padding:13px 18px;font-size:.88rem}
 .done .ways .btn:hover{background:var(--marker);border-color:var(--marker)}
@@ -773,12 +776,18 @@ form{display:grid;grid-template-columns:1fr 1fr;gap:14px 16px}
         <div class="f"><label for="f-whats">WhatsApp</label><input id="f-whats" name="whats" type="tel" autocomplete="tel" placeholder="(11) 90000-0000"><span class="err"></span></div>
         <div class="f full"><label for="f-nicho">Nicho</label><select id="f-nicho" name="nicho"><option>Beauty &amp; Skincare</option><option>Wellness &amp; Saúde</option><option>Lifestyle</option><option>Apps &amp; marcas digitais</option><option>Outro</option></select><span class="err"></span></div>
         <div class="f full"><label for="f-msg">Mensagem</label><textarea id="f-msg" name="msg" placeholder="Produto, objetivo da campanha, prazos..." required></textarea><span class="err"></span></div>
-        <div class="actions"><button class="btn btn-dark" type="submit">Enviar <span aria-hidden="true">→</span></button></div>
+        <input type="text" name="_honey" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">
+        <div class="actions"><button class="btn btn-dark" type="submit" id="send-btn">Enviar <span aria-hidden="true">→</span></button><span class="send-status" id="send-status" role="status" aria-live="polite"></span></div>
       </form>
     </div>
+    <div id="step-ok" class="done ok" hidden>
+      <h3>Mensagem enviada!</h3>
+      <p class="intro" style="margin:0">Obrigada pelo contato. Eu respondo em breve no seu e-mail ou WhatsApp. ✦</p>
+      <div><button class="btn btn-dark" type="button" id="ok-close">Fechar</button></div>
+    </div>
     <div id="step-done" class="done" hidden>
-      <h3>Quase lá!</h3>
-      <p class="intro" style="margin:0">Sua mensagem está pronta. Escolha por onde enviar:</p>
+      <h3>Ops!</h3>
+      <p class="intro" style="margin:0">Não consegui enviar por aqui agora. Você pode mandar a mesma mensagem por um destes caminhos:</p>
       <div class="ways">
         <a class="btn primary" id="via-gmail" target="_blank" rel="noopener">Enviar pelo Gmail</a>
         <a class="btn" id="via-mail">Outro app de e-mail</a>
@@ -969,7 +978,8 @@ document.querySelectorAll('[data-copy]').forEach(b=>b.addEventListener('click',(
 // modal
 const modal=document.getElementById('modal'), form=document.getElementById('lead');
 const stepForm=document.getElementById('step-form'), stepDone=document.getElementById('step-done');
-function openModal(){stepForm.hidden=false;stepDone.hidden=true;
+const stepOk=document.getElementById('step-ok');
+function openModal(){stepForm.hidden=false;stepDone.hidden=true;stepOk.hidden=true;
   if(modal.showModal){try{modal.showModal()}catch(e){modal.setAttribute('open','')}}else modal.setAttribute('open','');
   setTimeout(()=>document.getElementById('f-nome').focus(),50)}
 function closeModal(){if(modal.close)modal.close();else modal.removeAttribute('open')}
@@ -977,7 +987,7 @@ document.getElementById('open-form').onclick=openModal;
 document.getElementById('close-form').onclick=closeModal;
 modal.addEventListener('click',e=>{if(e.target===modal)closeModal()});
 let message="", subject="";
-form.addEventListener('submit',e=>{
+form.addEventListener('submit',async e=>{
   e.preventDefault();
   let ok=true;
   form.querySelectorAll('.f').forEach(f=>{
@@ -993,8 +1003,22 @@ form.addEventListener('submit',e=>{
   document.getElementById('via-mail').href=`mailto:${EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
   document.getElementById('via-whats').href=`https://wa.me/${WHATS}?text=${encodeURIComponent(message)}`;
   document.getElementById('preview').textContent=message;
-  stepForm.hidden=true; stepDone.hidden=false;
+  if(d._honey){stepForm.hidden=true;stepOk.hidden=false;return} // robô
+  const btn=document.getElementById('send-btn'), st=document.getElementById('send-status');
+  btn.disabled=true; st.textContent="Enviando...";
+  let sent=false;
+  try{
+    const r=await fetch(`https://formsubmit.co/ajax/${EMAIL}`,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},
+      body:JSON.stringify({_subject:subject,_template:'table',Nome:d.nome,Marca:d.marca,email:d.email,WhatsApp:d.whats||'-',Nicho:d.nicho,Mensagem:d.msg})});
+    const j=await r.json().catch(()=>({}));
+    sent=r.ok && String(j.success)==='true';
+  }catch(_){}
+  btn.disabled=false; st.textContent="";
+  stepForm.hidden=true;
+  if(sent){form.reset();stepOk.hidden=false;document.getElementById('ok-close').focus()}
+  else stepDone.hidden=false;
 });
+document.getElementById('ok-close').onclick=closeModal;
 document.getElementById('back').onclick=()=>{stepDone.hidden=true;stepForm.hidden=false};
 document.getElementById('copy-msg').addEventListener('click',e=>copyText(`Para: ${EMAIL}\nAssunto: ${subject}\n\n${message}`,e.currentTarget));
 </script>
